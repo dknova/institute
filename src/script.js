@@ -1,6 +1,3 @@
-/* ------------------------------------------------------------------ */
-/*  Setup                                                              */
-/* ------------------------------------------------------------------ */
 var canvas = document.getElementById('stage');
 var gl = canvas.getContext('webgl', { antialias: true, alpha: false });
 
@@ -13,38 +10,56 @@ if (!gl) {
 }
 
 var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-var PILL_Y = -18.5;   // capsule sits at the "dosing" section
+var PILL_Y = -18.5;   
 
-/* ------------------------------------------------------------------ */
-/*  Math helpers (column-major 4x4 matrices)                           */
-/* ------------------------------------------------------------------ */
-function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
+
+function clamp(v, a, b) { 
+    return Math.min(b, Math.max(a, v)); 
+}
 
 function smoothstep(a, b, x) {
     var t = clamp((x - a) / (b - a), 0, 1);
     return t * t * (3 - 2 * t);
 }
 
-function identity() { return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]); }
+function identity() { 
+    return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]); 
+}
 
-function translate(x, y, z) { var m = identity(); m[12] = x; m[13] = y; m[14] = z; return m; }
-function scale(x, y, z)     { var m = identity(); m[0] = x; m[5] = y; m[10] = z; return m; }
+function translate(x, y, z) { 
+    var m = identity(); m[12] = x; m[13] = y; m[14] = z; return m; 
+}
+function scale(x, y, z)     { 
+    var m = identity(); m[0] = x; m[5] = y; m[10] = z; return m; 
+}
 
 function rotateX(a) {
-    var m = identity(), c = Math.cos(a), s = Math.sin(a);
-    m[5] = c; m[9] = -s; m[6] = s; m[10] = c;
+    var m = identity(), 
+    c = Math.cos(a), 
+    s = Math.sin(a);
+    m[5] = c; 
+    m[9] = -s; 
+    m[6] = s; 
+    m[10] = c;
     return m;
 }
 function rotateZ(a) {
-    var m = identity(), c = Math.cos(a), s = Math.sin(a);
-    m[0] = c; m[4] = -s; m[1] = s; m[5] = c;
+    var m = identity(), 
+    c = Math.cos(a), 
+    s = Math.sin(a);
+    m[0] = c; 
+    m[4] = -s; 
+    m[1] = s; 
+    m[5] = c;
     return m;
 }
 
 function mul() {
     var r = arguments[0];
     for (var n = 1; n < arguments.length; n++) {
-        var a = r, b = arguments[n], o = new Float32Array(16);
+        var a = r, 
+        b = arguments[n], 
+        o = new Float32Array(16);
         for (var c = 0; c < 4; c++) {
             for (var row = 0; row < 4; row++) {
                 var s = 0;
@@ -58,22 +73,25 @@ function mul() {
 }
 
 function perspective(fovDeg, aspect, near, far) {
-    var f = 1 / Math.tan(fovDeg * Math.PI / 360), m = new Float32Array(16);
-    m[0] = f / aspect; m[5] = f;
-    m[10] = (far + near) / (near - far); m[11] = -1;
+    var f = 1 / Math.tan(fovDeg * Math.PI / 360), 
+    m = new Float32Array(16);
+    m[0] = f / aspect; 
+    m[5] = f;
+    m[10] = (far + near) / (near - far); 
+    m[11] = -1;
     m[14] = 2 * far * near / (near - far);
     return m;
 }
 
 function normalize3(v) {
     var l = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]) || 1;
-    v[0] /= l; v[1] /= l; v[2] /= l;
+    v[0] /= l; 
+    v[1] /= l; 
+    v[2] /= l;
     return v;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Shaders                                                            */
-/* ------------------------------------------------------------------ */
+
 function compile(type, source) {
     var s = gl.createShader(type);
     gl.shaderSource(s, source);
@@ -96,7 +114,9 @@ function makeProgram(vs, fs) {
 
 function locations(p, names) {
     var o = {};
-    names.forEach(function (n) { o[n] = gl.getUniformLocation(p, n); });
+    names.forEach(function (n) { 
+        o[n] = gl.getUniformLocation(p, n); 
+    });
     return o;
 }
 
@@ -108,7 +128,6 @@ var FRAG_PRECISION = [
     '#endif'
 ].join('\n');
 
-/* Capsule + blood cells: uniform colour, uParent * uModel */
 var litProg = makeProgram(
     [
         'precision highp float;',
@@ -143,13 +162,13 @@ var litProg = makeProgram(
         '           + vec3(1.0, 0.9, 0.75) * spec * 0.5;',
         '  float d = length(uCam - vW);',
         '  float fog = exp(-d * d * 0.0012);',
-        '  gl_FragColor = vec4(mix(vec3(0.051, 0.102, 0.165), col, fog), 1.0);',
+        '  gl_FragColor = vec4(mix(vec3(0.933, 0.953, 0.965), col, fog), 1.0);',
         '}'
     ].join('\n')
 );
 var L = locations(litProg, ['uProj', 'uView', 'uParent', 'uModel', 'uColor', 'uCam', 'uKeyPos', 'uRimPos']);
 
-/* DNA ribbons + rungs: per-vertex colour, two-sided silky lighting */
+
 var dnaProg = makeProgram(
     [
         'precision highp float;',
@@ -187,7 +206,7 @@ var dnaProg = makeProgram(
         '           + vec3(0.55, 0.60, 1.0) * fres * 0.25;',
         '  float d = length(uCam - vW);',
         '  float fog = exp(-d * d * 0.0012);',
-        '  gl_FragColor = vec4(mix(vec3(0.051, 0.102, 0.165), col, fog), 1.0);',
+        '  gl_FragColor = vec4(mix(vec3(0.933, 0.953, 0.965), col, fog), 1.0);',
         '}'
     ].join('\n')
 );
@@ -212,9 +231,7 @@ var flatProg = makeProgram(
 );
 var F = locations(flatProg, ['uProj', 'uView', 'uModel', 'uColor', 'uSize']);
 
-/* ------------------------------------------------------------------ */
-/*  Static meshes for the capsule and blood cells                      */
-/* ------------------------------------------------------------------ */
+
 function makeMesh(vertices, indices) {
     var vbo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
@@ -261,23 +278,21 @@ function buildCylinder(seg) {
 var sphere   = buildSphere(24, 32);
 var cylinder = buildCylinder(24);
 
-/* ------------------------------------------------------------------ */
-/*  Flowing DNA: two ribbon strands + thin rungs along a wavy spine    */
-/* ------------------------------------------------------------------ */
+
 var DNA = {
-    Y0: 7, LEN: 20,         // spine runs from y=7 down to y=-13
-    PITCH: 3.2,             // length of one full turn
-    STEPS: 240,             // samples along each ribbon
-    RUNGS: 125,             // base-pair rungs
-    R0: 1.25,               // helix radius
-    HW: 0.34,               // ribbon half-width (along the axis)
-    RW: 0.014,              // rung half-thickness
-    OFF: 2.7                // angle between strands (unequal = major/minor groove)
+    Y0: 7, LEN: 20,        
+    PITCH: 3.2,           
+    STEPS: 240,             
+    RUNGS: 125,            
+    R0: 1.25,               
+    HW: 0.34,               
+    RW: 0.014,            
+    OFF: 2.7               
 };
 
 var RIB_VERTS   = 2 * DNA.STEPS * 2;
 var TOTAL_VERTS = RIB_VERTS + DNA.RUNGS * 8;
-var dnaVerts    = new Float32Array(TOTAL_VERTS * 9);   // pos(3) normal(3) colour(3)
+var dnaVerts    = new Float32Array(TOTAL_VERTS * 9);  
 
 var dnaBuf = gl.createBuffer();
 var dnaIbo = gl.createBuffer();
@@ -303,11 +318,11 @@ var dnaCount = 0;
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
 })();
 
-var dnaCX = 0, dnaAmp = 1;       // set every frame
+var dnaCX = 0, dnaAmp = 1;       
 var _p0 = [0,0,0], _p1 = [0,0,0];
 var FR = { c: [0,0,0], T: [0,0,0], N: [0,0,0], B: [0,0,0], phi: 0, R: 0, hw: 0, tap: 1 };
 
-/* The centre line: a fixed, gentle S-curve (no time-based movement). */
+
 function spine(u, t, p, o) {
     var y = DNA.Y0 - DNA.LEN * u;
     o[0] = dnaCX + dnaAmp * (Math.sin(y * 0.30) + 0.35 * Math.sin(y * 0.75));
@@ -315,7 +330,7 @@ function spine(u, t, p, o) {
     o[2] = -3 + 4.5 * u + 0.8 * Math.sin(y * 0.22 + t * 0.4 + 1.0);
 }
 
-/* Position, tangent and a twist-free frame (N, B) at spine parameter u */
+
 function frameAt(u, t, p, rs) {
     spine(u, t, p, FR.c);
     spine(u - 0.002, t, p, _p0);
@@ -325,11 +340,11 @@ function frameAt(u, t, p, rs) {
     T[0] = _p1[0] - _p0[0]; T[1] = _p1[1] - _p0[1]; T[2] = _p1[2] - _p0[2];
     normalize3(T);
 
-    var N = FR.N;                          // cross((0,0,1), T)
+    var N = FR.N;                         
     N[0] = -T[1]; N[1] = T[0]; N[2] = 0;
     normalize3(N);
 
-    var B = FR.B;                          // cross(T, N)
+    var B = FR.B;                         
     B[0] = T[1] * N[2] - T[2] * N[1];
     B[1] = T[2] * N[0] - T[0] * N[2];
     B[2] = T[0] * N[1] - T[1] * N[0];
@@ -341,7 +356,7 @@ function frameAt(u, t, p, rs) {
     FR.hw  = DNA.HW * rs * FR.tap * (0.9 + 0.2 * Math.sin(y * 0.6 - t * 0.7));
 }
 
-/* Indigo at the top, violet in the middle, crimson-magenta at the bottom */
+
 var C_TOP = [0.26, 0.30, 0.80], C_MID = [0.55, 0.22, 0.70], C_BOT = [0.93, 0.24, 0.46];
 function gradient(u, out) {
     var a = smoothstep(0.0, 0.5, u), b = smoothstep(0.4, 1.0, u);
@@ -366,7 +381,7 @@ function buildDNA(t, p, rs) {
     vo = 0;
     var k, i, j;
 
-    /* the two ribbon strands */
+   
     for (k = 0; k < 2; k++) {
         for (i = 0; i < DNA.STEPS; i++) {
             var u = i / (DNA.STEPS - 1);
@@ -385,7 +400,7 @@ function buildDNA(t, p, rs) {
         }
     }
 
-    /* thin rungs joining the strands (two crossed quads so they read from any angle) */
+   
     for (j = 0; j < DNA.RUNGS; j++) {
         var uj = (j + 0.5) / DNA.RUNGS;
         frameAt(uj, t, p, rs);
@@ -399,9 +414,9 @@ function buildDNA(t, p, rs) {
         var d = [x1 - x0, y1 - y0, z1 - z0];
         var w = DNA.RW * rs * FR.tap;
 
-        /* quad 1: width along the axis */
+      
         var w1 = [T2[0] * w, T2[1] * w, T2[2] * w];
-        /* quad 2: width perpendicular to both the rung and the axis */
+       
         var w2 = normalize3([d[1] * T2[2] - d[2] * T2[1], d[2] * T2[0] - d[0] * T2[2], d[0] * T2[1] - d[1] * T2[0]]);
         w2[0] *= w; w2[1] *= w; w2[2] *= w;
 
@@ -423,9 +438,8 @@ function buildDNA(t, p, rs) {
     }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Dust and blood cells                                               */
-/* ------------------------------------------------------------------ */
+
+
 var dustData = [];
 for (var q = 0; q < 300; q++) {
     dustData.push((Math.random() - 0.5) * 24, -Math.random() * 36 + 4, (Math.random() - 0.5) * 24);
@@ -452,9 +466,7 @@ var CYL_TOP  = mul(translate(0,  0.75, 0), scale(0.7, 1.5, 0.7));
 var CYL_BOT  = mul(translate(0, -0.75, 0), scale(0.7, 1.5, 0.7));
 var IDENTITY = identity();
 
-/* ------------------------------------------------------------------ */
-/*  Canvas size + DOM hooks                                            */
-/* ------------------------------------------------------------------ */
+
 var W, H, dpr;
 function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -486,19 +498,18 @@ function updateText() {
     bar.style.setProperty('--p', scrollProgress().toFixed(3));
     header.classList.toggle('solid', window.scrollY > 40);
 }
+
 window.addEventListener('scroll', updateText, { passive: true });
 window.addEventListener('resize', updateText);
 updateText();
 
-/* ------------------------------------------------------------------ */
-/*  Render loop                                                        */
-/* ------------------------------------------------------------------ */
+
 gl.enable(gl.DEPTH_TEST);
 gl.enable(gl.BLEND);
 gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-gl.clearColor(0.051, 0.102, 0.165, 1);
+gl.clearColor(0.933, 0.953, 0.965, 1);
 
-var CORAL = [0.91, 0.38, 0.30], SALINE = [0.86, 0.93, 0.95];
+var CORAL = [0.55, 0.07, 0.12], SALINE = [0.12, 0.22, 0.36];
 var smoothP = 0;
 
 function bindMesh(m) {
@@ -543,10 +554,10 @@ function frame(time) {
     var rs        = mobile ? Math.min(fit, 0.6) : fit;
     var capsuleX  = -sideX;
 
-    /* ---- DNA ribbons ---- */
+    
     dnaCX  = sideX;
     dnaAmp = halfWidth * (mobile ? 0.3 : 0.22);
-    buildDNA(0, p, rs);          // time = 0: the DNA only moves when you scroll
+    buildDNA(0, p, rs);          
 
     gl.useProgram(dnaProg);
     gl.uniformMatrix4fv(D.uProj, false, proj);
@@ -567,7 +578,7 @@ function frame(time) {
     gl.drawElements(gl.TRIANGLES, dnaCount, gl.UNSIGNED_SHORT, 0);
     gl.disableVertexAttribArray(2);
 
-    /* ---- capsule + cells ---- */
+
     gl.useProgram(litProg);
     gl.uniformMatrix4fv(L.uProj, false, proj);
     gl.uniformMatrix4fv(L.uView, false, view);
@@ -603,13 +614,13 @@ function frame(time) {
     drawMesh(cylinder, CYL_TOP, CORAL);
     drawMesh(cylinder, CYL_BOT, SALINE);
 
-    /* ---- dust points ---- */
+    
     gl.useProgram(flatProg);
     gl.disableVertexAttribArray(1);
     gl.uniformMatrix4fv(F.uProj, false, proj);
     gl.uniformMatrix4fv(F.uView, false, view);
     gl.uniformMatrix4fv(F.uModel, false, IDENTITY);
-    gl.uniform4f(F.uColor, 0.86, 0.93, 0.95, 0.6);
+    gl.uniform4f(F.uColor, 0.05, 0.10, 0.16, 0.45);
     gl.uniform1f(F.uSize, 2 * dpr);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, dustBuf);
